@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!-- Fody -->
+  <PropertyGroup>
+    <WeaverDirPath>$(MSBuildThisFileDirectory).artifacts\bin\$(Configuration)</WeaverDirPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <WeaverFiles Include="$(MSBuildThisFileDirectory).artifacts\bin\$(Configuration)\netstandard2.0\$(SolutionName).dll" />
+  </ItemGroup>
+
+  <!-- Properties -->
+  <ItemGroup Condition="Exists('Properties\Resources.resx')">
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <Generator>ResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('Properties\Settings.settings')">
+    <None Update="Properties\Settings.settings">
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+      <Generator>SettingsSingleFileGenerator</Generator>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('Properties\Settings.settings.cs')">
+    <Compile Update="Properties\Settings.settings.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <AutoGen>True</AutoGen>
+    </Compile>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings.cs</DependentUpon>
+      <AutoGen>True</AutoGen>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup Condition="!Exists('Properties\Settings.settings.cs')">
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <AutoGen>True</AutoGen>
+    </Compile>
+  </ItemGroup>
+
+  <!-- Fody -->
+  <ItemGroup>
+    <None Remove="FodyWeavers.xml" />
+    <None Remove="FodyWeavers.xsd" />
+  </ItemGroup>
+
+  <!-- AssemblyMetadataAttribute -->
+  <Target Name="__AdditionalAssemblyMetadataAttribute" BeforeTargets="GetAssemblyAttributes" Condition="'$(GenerateAssemblyMetadataAttributes)' == 'True'">
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(SourceRevisionId)' != ''">
+        <_Parameter1>CommitHash</_Parameter1>
+        <_Parameter2>$(SourceRevisionId)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+
+</Project>
