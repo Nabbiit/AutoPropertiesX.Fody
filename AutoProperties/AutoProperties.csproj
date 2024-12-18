@@ -1,16 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net40-client;net45;netstandard1.0;netstandard2.0</TargetFrameworks>
-    <SignAssembly>True</SignAssembly>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
     <AssemblyOriginatorKeyFile>..\Common.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FodyPackaging" Version="6.2.0" PrivateAssets="All" />
-    <PackageReference Include="Fody" Version="6.2.0" PrivateAssets="None" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.0-beta-20204-02" PrivateAssets="All" />
+    <PackageReference Include="Fody" PrivateAssets="None" />
+    <PackageReference Include="FodyPackaging" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

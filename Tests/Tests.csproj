@@ -1,35 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFrameworks>net472</TargetFrameworks>
-    <CodeAnalysisRuleSet></CodeAnalysisRuleSet>
+    <TargetFrameworks>net8.0-windows</TargetFrameworks>
     <DisableFody>true</DisableFody>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <NoWarn>1701;1702;618</NoWarn>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <NoWarn>1701;1702;618</NoWarn>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Compile Include="..\FodyTools\FodyTools.Tests\Tools\ModuleHelper.cs" Link="ModuleHelper.cs" />
-    <Compile Include="..\FodyTools\FodyTools\ModuleExtensionMethods.cs" Link="ModuleExtensionMethods.cs" />
+    <PackageReference Include="FodyHelpers" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TomsToolbox.Core" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoProperties\AutoProperties.csproj" />
+    <ProjectReference Include="..\AutoProperties.Fody\AutoProperties.Fody.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\AssemblyToProcess\AssemblyToProcess.csproj" />
-    <ProjectReference Include="..\AutoProperties.Fody\AutoProperties.Fody.csproj" />
-    <ProjectReference Include="..\AutoProperties\AutoProperties.csproj" />
     <ProjectReference Include="..\TestLibrary\TestLibrary.csproj" />
   </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="FodyHelpers" Version="6.2.0" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" PrivateAssets="All" />
-    <PackageReference Include="TomsToolbox.Core" Version="1.0.75" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.0-beta-20204-02" PrivateAssets="All" />
+    <Compile Include="..\FodyTools\FodyTools.Tests\Tools\ModuleHelper.cs" Link="FodyTools.Tests\Tools\ModuleHelper.cs" />
+    <Compile Include="..\FodyTools\FodyTools\ModuleExtensionMethods.cs" Link="FodyTools\ModuleExtensionMethods.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.ComponentModel.Composition" />
-    <Reference Include="System.Data.DataSetExtensions" />
-  </ItemGroup>
+
 </Project>
