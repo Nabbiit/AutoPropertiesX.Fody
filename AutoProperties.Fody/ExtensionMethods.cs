@@ -1,70 +1,55 @@
-﻿namespace AutoProperties.Fody
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using FodyTools;
+
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+
+namespace AutoProperties.Fody
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics.CodeAnalysis;
-    using System.Linq;
-
-    using FodyTools;
-
-    using Mono.Cecil;
-    using Mono.Cecil.Cil;
-
     internal static class ExtensionMethods
     {
-        public static bool? ShouldBypassAutoPropertySettersInConstructors(this ICustomAttributeProvider? node)
-        {
-            return node?
-                .CustomAttributes
-                .GetAttribute(AttributeNames.BypassAutoPropertySettersInConstructors)?
-                .ConstructorArguments?
-                .Select(arg => arg.Value as bool?)
-                .FirstOrDefault();
-        }
+        public static bool? ShouldBypassAutoPropertySettersInConstructors(this ICustomAttributeProvider? node) =>
+            node?.CustomAttributes.GetAttribute(AttributeNames.BypassAutoPropertySettersInConstructors)?.ConstructorArguments?.Select(arg => arg.Value as bool?).FirstOrDefault();
 
-        public static CustomAttribute? GetAttribute(this IEnumerable<CustomAttribute> attributes, string? attributeName)
-        {
-            return attributes.FirstOrDefault(attribute => attribute.Constructor?.DeclaringType?.FullName == attributeName);
-        }
+        public static CustomAttribute? GetAttribute(this IEnumerable<CustomAttribute> attributes, string? attributeName) => attributes.FirstOrDefault(attribute => attribute.Constructor?.DeclaringType?.FullName == attributeName);
 
-        public static bool IsPropertySetterCall(this Instruction instruction, [NotNullWhen(true)] out string? propertyName)
-        {
-            return IsPropertyCall(instruction, "set_", out propertyName);
-        }
+        public static bool IsPropertySetterCall(this Instruction instruction, [NotNullWhen(true)] out string? propertyName) => IsPropertyCall(instruction, "set_", out propertyName);
 
-        public static bool IsPropertyGetterCall(this Instruction instruction, [NotNullWhen(true)] out string? propertyName)
-        {
-            return IsPropertyCall(instruction, "get_", out propertyName);
-        }
+        public static bool IsPropertyGetterCall(this Instruction instruction, [NotNullWhen(true)] out string? propertyName) => IsPropertyCall(instruction, "get_", out propertyName);
 
         private static bool IsPropertyCall(this Instruction instruction, string prefix, [NotNullWhen(true)] out string? propertyName)
         {
             propertyName = null;
 
             if (instruction.OpCode.Code != Code.Call)
-            {
                 return false;
-            }
 
-            if (!(instruction.Operand is MethodDefinition operand))
-            {
+            if (instruction.GetMethodDefinition() is not MethodDefinition methodDefinition)
                 return false;
-            }
 
-            if (!(operand.IsSetter || operand.IsGetter))
-            {
+            if (!(methodDefinition.IsSetter || methodDefinition.IsGetter))
                 return false;
-            }
 
-            var operandName = operand.Name;
+            var operandName = methodDefinition.Name;
+
             if (operandName?.StartsWith(prefix, StringComparison.Ordinal) != true)
-            {
                 return false;
-            }
 
             propertyName = operandName.Substring(prefix.Length);
+
             return true;
         }
+
+        private static MethodDefinition? GetMethodDefinition(this Instruction instruction) => instruction.Operand switch
+        {
+            MethodDefinition methodDefinition => methodDefinition,
+            MethodReference methodReference => methodReference.Resolve(),
+            _ => default,
+        };
 
         public static FieldDefinition? FindAutoPropertyBackingField(this PropertyDefinition property, IEnumerable<FieldDefinition> fields)
         {
@@ -78,7 +63,7 @@
             if (instruction?.OpCode.Code != Code.Call)
                 return false;
 
-            if (!(instruction.Operand is GenericInstanceMethod operand))
+            if (instruction.Operand is not GenericInstanceMethod operand)
                 return false;
 
             if (operand.DeclaringType?.FullName != "AutoProperties.BackingFieldAccessExtensions")
@@ -90,26 +75,24 @@
             return true;
         }
 
-        public static IEnumerable<TypeDefinition> GetSelfAndBaseTypes(this TypeDefinition type)
+        public static IEnumerable<TypeDefinition> GetSelfAndBaseTypes(this TypeDefinition typeDefinition)
         {
-            yield return type;
+            yield return typeDefinition;
 
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-            while ((type = type.BaseType?.Resolve()) != null)
-#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
+            while (true)
             {
-                yield return type;
+                if (typeDefinition.BaseType is not TypeReference typeReference)
+                    break;
+
+                typeDefinition = typeReference.Resolve();
+
+                yield return typeDefinition;
             }
         }
 
-        public static TValue? GetValueOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey? key)
-            where TKey: class
-            where TValue: class
+        public static TValue? GetValueOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey? key) where TKey : class where TValue : class
         {
-            if (key is null)
-                return default;
-
-            return dictionary.TryGetValue(key, out var value) ? value : default;
+            return (key is not null) && dictionary.TryGetValue(key, out var value) ? value : default;
         }
 
         public static bool AccessesMember(this MethodDefinition method, IMemberDefinition member)
@@ -120,13 +103,15 @@
         public static void ReplaceFieldAccessWithPropertySetter(this MethodDefinition constructor, IMemberDefinition field, PropertyDefinition property, ISymbolReader? symbolReader)
         {
             var setMethod = property.SetMethod;
-            if (setMethod == null)
+
+            if (setMethod is null)
                 return;
 
             // field initializers are called before the call to the base constructor, but property setters must be called after!
 
             var instructions = constructor.Body?.Instructions;
-            if (instructions == null)
+
+            if (instructions is null)
                 return;
 
             var instructionSequences = new InstructionSequences(instructions, constructor.ReadSequencePoints(symbolReader));
@@ -173,20 +158,18 @@
         public static FieldReference GetReference(this FieldDefinition field)
         {
             // Make the backing field - even of get-only properties - accessible by the interceptors...
-            field.IsInitOnly = false;
+            //field.IsInitOnly = false;
 
             var declaringType = field.DeclaringType;
 
             if (!declaringType.HasGenericParameters)
                 return field;
 
-            var generic = new GenericInstanceType(declaringType);
+            var genericDeclaringType = new GenericInstanceType(declaringType);
 
-            generic.GenericArguments.AddRange(declaringType.GenericParameters);
+            genericDeclaringType.GenericArguments.AddRange(declaringType.GenericParameters);
 
-            var genericField = new FieldReference(field.Name, field.FieldType, generic);
-
-            return genericField;
+            return new(field.Name, field.FieldType, genericDeclaringType);
         }
 
         public static TypeReference GetReference(this TypeReference type)
@@ -203,6 +186,7 @@
                 throw new ArgumentException("Generic parameters mismatch");
 
             var instance = new GenericInstanceType(type);
+
             foreach (var argument in arguments)
                 instance.GenericArguments.Add(argument);
 
@@ -213,21 +197,22 @@
         {
             var genericParameterProvider = callingType.Module.TryImportReference(callingType.Resolve()?.GetSelfAndBaseTypes().FirstOrDefault(t => t.HasGenericParameters));
 
-            return callingType.Module.ImportReference(InnerGetReference(callee, callingType), genericParameterProvider);
+            return callingType.Module.ImportReference(callee.InnerGetReference(callingType), genericParameterProvider);
         }
 
-        private static MethodReference InnerGetReference(MethodReference callee, TypeReference callingType)
+        private static MethodReference InnerGetReference(this MethodReference callee, TypeReference callingType)
         {
-            var calleeType = callee.DeclaringType.Resolve();
-
             var baseType = callingType;
             var genericParameters = callingType.GenericParameters.ToArray();
             var genericArguments = genericParameters.Cast<TypeReference>().ToArray();
 
+            var calleeType = callee.DeclaringType.Resolve();
+
             while (baseType.Resolve() != calleeType)
             {
                 baseType = baseType.Resolve().BaseType;
-                if (baseType == null)
+
+                if (baseType is null)
                     return callee;
 
                 if (baseType is IGenericInstance genericInstance)
@@ -257,9 +242,8 @@
             if (!genericArguments.Any())
                 return callee;
 
-            var reference = new MethodReference(callee.Name, callee.ReturnType)
+            var reference = new MethodReference(callee.Name, callee.ReturnType, callee.DeclaringType.GetReference(genericArguments.ToArray()))
             {
-                DeclaringType = callee.DeclaringType.GetReference(genericArguments.ToArray()),
                 HasThis = callee.HasThis,
                 ExplicitThis = callee.ExplicitThis,
                 CallingConvention = callee.CallingConvention,
@@ -271,14 +255,98 @@
             return reference;
         }
 
-        public static MethodReference? TryImportReference(this ModuleDefinition module, MethodReference? method)
+        public static MethodReference? TryImportReference(this ModuleDefinition module, MethodReference? method) => (method is null) ? default : module.ImportReference(method, default);
+
+        public static TypeReference? TryImportReference(this ModuleDefinition module, TypeReference? type) => (type is null) ? default : module.ImportReference(type, default);
+
+        public static TypeReference ImportReference(this TypeDefinition typeDefinition, TypeReference typeReference) => typeDefinition.Module.ImportReference(typeReference, default);
+
+        public static MethodReference ImportReference(this TypeDefinition typeDefinition, MethodReference methodReference) => typeDefinition.Module.ImportReference(methodReference, default);
+
+        public static MethodReference MakeGeneric(this MethodReference self, TypeReference declaringType)
         {
-            return method == null ? null : module.ImportReference(method);
+            var reference = new MethodReference(self.Name, self.ReturnType, declaringType)
+            {
+                HasThis = self.HasThis,
+                ExplicitThis = self.ExplicitThis,
+                CallingConvention = self.CallingConvention,
+            };
+
+            foreach (var parameter in self.Parameters)
+            {
+                reference.Parameters.Add(new(parameter.ParameterType));
+            }
+
+            return reference;
         }
 
-        public static TypeReference? TryImportReference(this ModuleDefinition module, TypeReference? type)
+        public static bool HasInterface(this TypeDefinition typeDefinition, string fullName)
         {
-            return type == null ? null : module.ImportReference(type);
+            foreach (var interfaceImplementation in typeDefinition.Interfaces)
+            {
+                if (interfaceImplementation.InterfaceType.FullName == fullName)
+                {
+                    return true;
+                }
+            }
+
+            return default;
         }
+
+        public static SequencePoint? GetPoint(this MethodDefinition methodDefinition) => methodDefinition.DebugInformation.SequencePoints.FirstOrDefault();
+
+        public static SequencePoint? GetPoint(this TypeDefinition typeDefinition)
+        {
+            var constructors = new List<MethodDefinition>();
+
+            foreach (var methodDefinition in typeDefinition.Methods)
+            {
+                if (methodDefinition.IsConstructor)
+                {
+                    constructors.Add(methodDefinition);
+                }
+            }
+
+            foreach (var constructor in constructors)
+            {
+                if (((constructor.Attributes | MethodAttributes.Static) & MethodAttributes.Static) is 0)
+                {
+                    return constructor.DebugInformation.SequencePoints.FirstOrDefault();
+                }
+            }
+
+            foreach (var constructor in constructors)
+            {
+                if (((constructor.Attributes | MethodAttributes.Static) & MethodAttributes.Static) is MethodAttributes.Static)
+                {
+                    return constructor.DebugInformation.SequencePoints.FirstOrDefault();
+                }
+            }
+
+            return default;
+        }
+
+        public static bool IsOverridden(this MethodDefinition methodDefinition)
+        {
+            const MethodAttributes Attributes = MethodAttributes.Virtual | MethodAttributes.HideBySig;  // override
+
+            return (methodDefinition.Attributes & Attributes) is Attributes;
+        }
+
+        public static bool IsVirtual(this MethodDefinition methodDefinition)
+        {
+            const MethodAttributes Attributes = MethodAttributes.Virtual | MethodAttributes.HideBySig | MethodAttributes.NewSlot;  // virtual
+
+            return (methodDefinition.Attributes & Attributes) is Attributes;
+        }
+
+        public static bool IsAbstract(this MethodDefinition methodDefinition)
+        {
+            const MethodAttributes Attributes = MethodAttributes.Virtual | MethodAttributes.HideBySig | MethodAttributes.NewSlot | MethodAttributes.Abstract;  // abstract
+
+            return (methodDefinition.Attributes & Attributes) is Attributes;
+        }
+
+        public static bool IsStatic(this TypeDefinition type) => (type.Attributes & (TypeAttributes.Abstract | TypeAttributes.Sealed)) == (TypeAttributes.Abstract | TypeAttributes.Sealed);
     }
 }

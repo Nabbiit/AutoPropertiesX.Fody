@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace AutoProperties
 {
@@ -16,12 +16,11 @@ namespace AutoProperties
         /// <param name="property">The property.</param>
         /// <param name="value">The value to set.</param>
         /// <remarks>
-        /// After the assembly has being weaved, this method call is replaced by code that assigns the value directly to the backing field of the auto-property.
+        /// <list type="bullet">
+        ///   <item>After the assembly has being weaved, this method call is replaced by code that assigns the value directly to the backing field of the auto-property.</item>
+        /// </list>
         /// </remarks>
-        public static void SetBackingField<T>(this T property, T value)
-        {
-            throw new NotSupportedException(Message);
-        }
+        public static void SetBackingField<T>(this T property, T value) => throw new NotSupportedException(Message);
 
         /// <summary>
         /// Sets the value of the auto-property.
@@ -30,12 +29,11 @@ namespace AutoProperties
         /// <param name="property">The property.</param>
         /// <param name="value">The value to set.</param>
         /// <remarks>
-        /// This extension method only has an effect in combination with the <see cref="BypassAutoPropertySettersInConstructorsAttribute"/>, to turn off bypassing the setter inside the constructor when bypassing is on. 
-        /// Using this extension elsewhere is just the same as writing "Property = value"
+        /// <list type="bullet">
+        ///   <item>This extension method only has an effect in combination with the <see cref="BypassAutoPropertySettersInConstructorsAttribute" />, to turn off bypassing the setter inside the constructor when bypassing is on.</item>
+        ///   <item>Using this extension elsewhere is just the same as writing "Property = value".</item>
+        /// </list>
         /// </remarks>
-        public static void SetProperty<T>(this T property, T value)
-        {
-            throw new NotSupportedException(Message);
-        }
+        public static void SetProperty<T>(this T property, T value) => throw new NotSupportedException(Message);
     }
 }

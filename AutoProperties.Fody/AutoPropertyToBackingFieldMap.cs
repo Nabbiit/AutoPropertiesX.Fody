@@ -1,55 +1,46 @@
-﻿namespace AutoProperties.Fody
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
+
+using Mono.Cecil;
+
+namespace AutoProperties.Fody
 {
-    using System.Collections.Generic;
-    using System.Diagnostics.CodeAnalysis;
-    using System.Linq;
-
-    using Mono.Cecil;
-
-    internal class AutoPropertyToBackingFieldMap
+    internal sealed class AutoPropertyToBackingFieldMap(TypeDefinition classDefinition)
     {
-        private readonly TypeDefinition _classDefinition;
-        private IDictionary<string, AutoPropertyInfo>? _map;
+        private readonly TypeDefinition _classDefinition = classDefinition;
 
-        public AutoPropertyToBackingFieldMap(TypeDefinition classDefinition)
-        {
-            _classDefinition = classDefinition;
-        }
+        private IDictionary<string, AutoPropertyInfo>? _map;
 
         public bool TryGetValue(string propertyName, [NotNullWhen(true)] out AutoPropertyInfo? value)
         {
-            var map = _map ??= CreateMap();
+            _map ??= CreateMap();
 
-            return map.TryGetValue(propertyName, out value);
+            return _map.TryGetValue(propertyName, out value);
         }
 
-        private IDictionary<string, AutoPropertyInfo> CreateMap()
-        {
-            var fields = _classDefinition.Fields;
-            var properties = _classDefinition.Properties;
+        private IDictionary<string, AutoPropertyInfo> CreateMap() => CreateMap(_classDefinition.Properties, _classDefinition.Fields);
 
-            return CreateMap(properties, fields);
-        }
-
-        private static IDictionary<string, AutoPropertyInfo> CreateMap(ICollection<PropertyDefinition> properties, ICollection<FieldDefinition> fields)
+        private static ReadOnlyDictionary<string, AutoPropertyInfo> CreateMap(ICollection<PropertyDefinition> properties, ICollection<FieldDefinition> fields)
         {
-            return properties.Select(property => new { Property = property, BackingField = property.FindAutoPropertyBackingField(fields) })
-                .Where(item => item.BackingField != null)
-                .Select(item => new AutoPropertyInfo(item.BackingField!, item.Property))
-                .ToDictionary(item => item.Property.Name);
+            var map = new Dictionary<string, AutoPropertyInfo>();
+
+            foreach (var property in properties)
+            {
+                if (property.FindAutoPropertyBackingField(fields) is FieldDefinition fieldDefinition)
+                {
+                    map.Add(property.Name, new(fieldDefinition.GetReference(), property));
+                }
+            }
+
+            return new(map);
         }
     }
 
-    internal class AutoPropertyInfo
+    internal sealed class AutoPropertyInfo(FieldReference backingField, PropertyDefinition property)
     {
-        public AutoPropertyInfo(FieldDefinition backingField, PropertyDefinition property)
-        {
-            BackingField = backingField;
-            Property = property;
-        }
+        public FieldReference BackingField { get; } = backingField;
 
-        public FieldDefinition BackingField { get; }
-
-        public PropertyDefinition Property { get; }
+        public PropertyDefinition Property { get; } = property;
     }
 }

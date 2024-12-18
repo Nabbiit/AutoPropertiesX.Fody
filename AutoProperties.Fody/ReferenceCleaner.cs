@@ -1,37 +1,33 @@
-﻿namespace AutoProperties.Fody
+using System.Collections.Generic;
+using System.Linq;
+
+using FodyTools;
+
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using Mono.Cecil.Rocks;
+
+namespace AutoProperties.Fody
 {
-    using System.Collections.Generic;
-    using System.Linq;
-
-    using FodyTools;
-
-    using Mono.Cecil;
-    using Mono.Cecil.Cil;
-    using Mono.Cecil.Rocks;
-
-    internal class ReferenceCleaner
+    internal sealed class ReferenceCleaner(ModuleDefinition moduleDefinition, ModuleWeaver moduleWeaver)
     {
-        private static readonly HashSet<string> _attributesToRemove = new HashSet<string>
-        {
+        private static readonly HashSet<string> _attributesToRemove =
+        [
             AttributeNames.BypassAutoPropertySettersInConstructors,
             AttributeNames.InterceptIgnore,
-        };
+        ];
 
-        private static readonly HashSet<string> _attributesToReplace = new HashSet<string>
-        {
+        private static readonly HashSet<string> _attributesToReplace =
+        [
             AttributeNames.GetInterceptor,
-            AttributeNames.SetInterceptor
-        };
+            AttributeNames.SetInterceptor,
+        ];
 
-        private readonly ModuleDefinition _moduleDefinition;
-        private readonly ILogger _logger;
-        private readonly Dictionary<string, TypeDefinition> _localAttributeTypes = new Dictionary<string, TypeDefinition>();
+        private readonly Dictionary<string, TypeDefinition> _localAttributeTypes = [];
 
-        public ReferenceCleaner(ModuleDefinition moduleDefinition, ILogger logger)
-        {
-            _logger = logger;
-            _moduleDefinition = moduleDefinition;
-        }
+        private readonly ModuleDefinition _moduleDefinition = moduleDefinition;
+        private readonly ModuleWeaver _moduleWeaver = moduleWeaver;
+        private readonly ILogger _logger = moduleWeaver;
 
         public void RemoveAttributes()
         {
@@ -48,11 +44,6 @@
         {
             RemoveAttributes(type.CustomAttributes);
 
-            foreach (var property in type.Properties)
-            {
-                RemoveAttributes(property.CustomAttributes);
-            }
-
             foreach (var field in type.Fields)
             {
                 RemoveAttributes(field.CustomAttributes);
@@ -61,6 +52,11 @@
             foreach (var method in type.Methods)
             {
                 RemoveAttributes(method.CustomAttributes);
+            }
+
+            foreach (var property in type.Properties)
+            {
+                RemoveAttributes(property.CustomAttributes);
             }
         }
 
@@ -97,28 +93,33 @@
                 {
                     _logger.LogInfo($"\tAssembly already contains a local attribute {attributeType.FullName}");
                     _localAttributeTypes.Add(attributeType.FullName, attributeType);
+
                     return customAttribute;
                 }
 
                 _logger.LogInfo($"\tAdd local attribute {attributeType.FullName}");
+
                 var baseType = _moduleDefinition.ImportReference(attributeType.BaseType);
 
                 localAttributeType = new TypeDefinition(attributeType.Namespace, attributeType.Name, TypeAttributes.BeforeFieldInit | TypeAttributes.Sealed, baseType);
-                var localConstructor = new MethodDefinition(".ctor", constructor.Attributes, _moduleDefinition.TypeSystem.Void)
+
+                var localConstructor = new MethodDefinition(".ctor", constructor.Attributes, _moduleWeaver.TypeSystem.VoidReference)
                 {
-                    HasThis = constructor.HasThis
+                    HasThis = constructor.HasThis,
                 };
 
                 localConstructor.Body.Instructions.AddRange(
                     Instruction.Create(OpCodes.Ldarg_0),
                     Instruction.Create(OpCodes.Call, _moduleDefinition.ImportReference(baseType.Resolve().GetConstructors().First(ctor => !ctor.HasParameters))),
                     Instruction.Create(OpCodes.Ret));
+
                 localAttributeType.Methods.Add(localConstructor);
                 _moduleDefinition.Types.Add(localAttributeType);
+
                 _localAttributeTypes.Add(attributeType.FullName, localAttributeType);
             }
 
-            return new CustomAttribute(localAttributeType.GetConstructors().First());
+            return new(localAttributeType.GetConstructors().First());
         }
     }
 }

@@ -2,7 +2,7 @@
 <Project>
 
   <PropertyGroup>
-    <Authors>tom-englert</Authors>
+    <Authors>Nabbiit;tom-englert</Authors>
     <Company>tom-englert.de</Company>
     <Title Condition="'$(Title)' == ''">$(Product)</Title>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

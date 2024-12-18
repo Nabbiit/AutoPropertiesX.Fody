@@ -1,17 +1,11 @@
-﻿namespace AutoProperties.Fody
+using System;
+
+using Mono.Cecil;
+
+namespace AutoProperties.Fody
 {
-    using System;
-
-    using Mono.Cecil;
-
-    internal class WeavingException : Exception
+    internal sealed class WeavingException(string message, MethodReference? method = default) : Exception(message)
     {
-        public WeavingException(string message, MethodReference? method = null)
-            : base(message)
-        {
-            Method = method;
-        }
-
-        public MethodReference? Method { get; }
+        public MethodReference? Method { get; } = method;
     }
 }

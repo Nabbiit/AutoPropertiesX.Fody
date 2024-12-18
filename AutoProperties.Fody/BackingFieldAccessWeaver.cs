@@ -1,32 +1,24 @@
-﻿namespace AutoProperties.Fody
+using System;
+using System.Linq;
+
+using FodyTools;
+
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+
+namespace AutoProperties.Fody
 {
-    using System;
-    using System.Linq;
-
-    using FodyTools;
-
-    using Mono.Cecil;
-    using Mono.Cecil.Cil;
-
-    internal class BackingFieldAccessWeaver
+    internal sealed class BackingFieldAccessWeaver(ModuleDefinition moduleDefinition, ILogger logger)
     {
-        private readonly ModuleDefinition _moduleDefinition;
-        private readonly ILogger _logger;
-        private readonly ISymbolReader? _symbolReader;
+        private readonly ModuleDefinition _moduleDefinition = moduleDefinition;
 
-        public BackingFieldAccessWeaver(ModuleDefinition moduleDefinition, ILogger logger)
-        {
-            _logger = logger;
-            _moduleDefinition = moduleDefinition;
-            _symbolReader = moduleDefinition.SymbolReader;
-        }
+        private readonly ISymbolReader? _symbolReader = moduleDefinition.SymbolReader;
+        private readonly ILogger _logger = logger;
 
         internal void Execute()
         {
             var allTypes = _moduleDefinition.GetTypes();
-
-            var allClasses = allTypes
-                .Where(x => x != null && x.IsClass && (x.BaseType != null));
+            var allClasses = allTypes.Where(x => x != null && x.IsClass && (x.BaseType != null));
 
             try
             {
@@ -37,7 +29,6 @@
                                                           ?? false;
 
                     var autoPropertyToBackingFieldMap = new AutoPropertyToBackingFieldMap(classDefinition);
-
                     var allMethods = classDefinition.Methods.Where(method => method.HasBody);
 
                     foreach (var method in allMethods)
@@ -51,10 +42,13 @@
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                _logger.LogError("Unhandled exception. Weaving aborted. The most probable reason is that the module has no or incompatible debug information (.pdb)");
-                _logger.LogDebug(ex.ToString());
+                _logger.LogError($"""
+                                  Unhandled exception. Weaving aborted.
+                                  The most probable reason is that the module has no or incompatible debug information (.pdb).
+                                  {exception}
+                                  """);
             }
         }
 
@@ -66,7 +60,7 @@
             {
                 var instruction = instructions[index];
 
-                if (!instruction.IsPropertySetterCall(out string? propertyName) || propertyName == null)
+                if (!instruction.IsPropertySetterCall(out var propertyName) || (propertyName is null))
                     continue;
 
                 if (!autoPropertyToBackingFieldMap.TryGetValue(propertyName, out var propertyInfo))
@@ -82,25 +76,16 @@
         {
             var processor = new ExtensionMethodProcessor(_logger, _symbolReader, method, autoPropertyToBackingFieldMap);
 
-            processor.ProcessExtensionMethodCalls("SetBackingField", pi => Instruction.Create(OpCodes.Stfld, pi.BackingField));
-            processor.ProcessExtensionMethodCalls("SetProperty", pi => Instruction.Create(OpCodes.Call, pi.Property.SetMethod));
+            processor.ProcessExtensionMethodCalls("SetBackingField", static propertyInfo => Instruction.Create(OpCodes.Stfld, propertyInfo.BackingField));
+            processor.ProcessExtensionMethodCalls("SetProperty", static propertyInfo => Instruction.Create(OpCodes.Call, propertyInfo.Property.SetMethod));
         }
 
-        private class ExtensionMethodProcessor
+        private sealed class ExtensionMethodProcessor(ILogger logger, ISymbolReader? symbolReader, MethodDefinition method, AutoPropertyToBackingFieldMap autoPropertyToBackingFieldMap)
         {
-            private readonly ILogger _logger;
-            private readonly MethodDefinition _method;
-            private readonly AutoPropertyToBackingFieldMap _autoPropertyToBackingFieldMap;
-            private readonly InstructionSequences _instructionSequences;
-
-            public ExtensionMethodProcessor(ILogger logger, ISymbolReader? symbolReader, MethodDefinition method, AutoPropertyToBackingFieldMap autoPropertyToBackingFieldMap)
-            {
-                _logger = logger;
-                _method = method;
-                _autoPropertyToBackingFieldMap = autoPropertyToBackingFieldMap;
-
-                _instructionSequences = new InstructionSequences(method.Body.Instructions, method.ReadSequencePoints(symbolReader));
-            }
+            private readonly ILogger _logger = logger;
+            private readonly MethodDefinition _method = method;
+            private readonly AutoPropertyToBackingFieldMap _autoPropertyToBackingFieldMap = autoPropertyToBackingFieldMap;
+            private readonly InstructionSequences _instructionSequences = new(method.Body.Instructions, method.ReadSequencePoints(symbolReader));
 
             public void ProcessExtensionMethodCalls(string extensionMethodName, Func<AutoPropertyInfo, Instruction> createInstruction)
             {
@@ -122,12 +107,15 @@
 
                     if (sequence.Count < 4
                         || sequence[0].OpCode != OpCodes.Ldarg_0
-                        || !sequence[1].IsPropertyGetterCall(out string? propertyName)
-                        || sequence.Skip(index + 1).Any(inst => inst?.OpCode != OpCodes.Nop)
+                        || !sequence[1].IsPropertyGetterCall(out var propertyName)
+                        //|| sequence.Skip(index + 1).Any(inst => inst?.OpCode != OpCodes.Nop)
+                        || sequence.Skip(index + 1).Any(inst => inst is null || inst.OpCode.Code is not Code.Nop and not Code.Ret)
                         || !_autoPropertyToBackingFieldMap.TryGetValue(propertyName, out var propertyInfo))
                     {
                         var message = $"Invalid usage of extension method '{extensionMethodName}()': '{extensionMethodName}()' is only valid on auto-properties of class {_method.DeclaringType?.Name}";
+
                         _logger.LogError(message, sequence.Point);
+
                         return false;
                     }
 
@@ -135,6 +123,7 @@
 
                     sequence[index] = createInstruction(propertyInfo!);
                     sequence.RemoveAt(1);
+
                     return true;
                 }
 
